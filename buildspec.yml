@@ -1,0 +1,46 @@
+version: 0.2
+
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - echo $AWS_DEFAULT_REGION and $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=944708576171.dkr.ecr.ap-south-1.amazonaws.com/locodemoapp
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - echo $COMMIT_HASH
+      - IMAGE_TAG=BN.$(echo $CODEBUILD_BUILD_ID | awk -F":" '{print $2}' | cut -c 1-7)-CH.$COMMIT_HASH
+      - echo "$IMAGE_TAG" and "$CODEBUILD_BUILD_ID"
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - #commiting to devops repo for automation
+      - echo $CODEBUILD_SRC_DIR
+      - git clone https://github.com/kavinjeveriya/loco_devops.git
+      - git config --global user.email "kavinjaveriya@gmail.com"
+      - git config --global user.name "kavinjeveriya"
+      - cd loco_devops
+      - git checkout locohelm
+      - FILE_PATH=$CODEBUILD_SRC_DIR/loco_devops/locodemoapp/values.yaml
+      - awk -v new_tag="$IMAGE_TAG" '/^  tag:/{sub($2, new_tag)}1' $FILE_PATH > temp && mv -f temp $FILE_PATH
+      - # awk -v new_tag="$IMAGE_TAG" '/^tag:/{sub($2, new_tag)}1' $FILE_PATH > temp && mv -f temp $FILE_PATH
+      - git add .
+      - git status
+      - git commit -m "changing image tag according commit $COMMIT_HASH !!!" $FILE_PATH 
+      - git remote set-url origin https://$SCM_USER:$SCM_PASSWORD@github.com/$SCM_USER/loco_devops.git
+      - git push origin locohelm # Or the branch you want to push to
+artifacts:
+     files: '**/*'
+
+     #commenting asdfasdfasdf askdfkadjshfskaj
